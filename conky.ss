@@ -39,6 +39,11 @@
     ((_ v . args)
      (var->string 'v (list . args)))))
 
+(define-syntax color
+  (syntax-rules ()
+    ((_ c e)
+     (format "^fg(~a)~a^fg()" 'c e))))
+
 (define var->string
   (lambda (v args)
     (format "${~a~a" v
@@ -61,11 +66,6 @@
     (format "~a~a${else}~a${endif}"
             (var->string (format "if_~a" t) args)
             c a)))
-
-(define-syntax color
-  (syntax-rules ()
-    ((_ c e)
-     (format "^fg(~a)~a^fg()" 'c e))))
 
 (define clickable
   (lambda (b c e)
