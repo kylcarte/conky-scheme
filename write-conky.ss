@@ -1,6 +1,6 @@
 (load "conky.ss")
 
-(conky ".conkytop"
+(conky "/home/kcarter/.conkytop"
   (all
     (network 'eth0
       (all
@@ -18,6 +18,6 @@
       (all "BATT " (battery-guage 25 75))
       (color green "BATT FULL"))))
 
-(conky ".conkytime"
+(conky "/home/kcarter/.conkytime"
   (color orange (var time "%I:%M %p %A, %d %B %Y")))
 

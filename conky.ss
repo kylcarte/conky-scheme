@@ -161,7 +161,7 @@
 
 (define write-conky
   (lambda (file th)
-    (with-output-to-file (format "/home/kcarter/~a" file)
+    (with-output-to-file file
       (lambda ()
         (conf)
         (display (th)))
