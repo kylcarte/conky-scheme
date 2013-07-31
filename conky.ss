@@ -6,24 +6,38 @@
     ((_ (col c) (col* c*) ...)
      (begin
        (set! col
-         (lambda (e)
-           (color c e)))
+         (lambda (b)
+           (lambda (e)
+             (if b
+               (fg-color-fmt c e)
+               (bg-color-fmt c e)))))
        (set! col*
-         (lambda (e)
-           (color c* e)))
+         (lambda (b)
+           (lambda (e)
+             (if b
+               (fg-color-fmt c* e)
+               (bg-color-fmt c* e)))))
        ...))))
+
 
 (define-syntax define-colors-hex
   (syntax-rules ()
-    ((_ (col hex) (c* h*) ...)
+    ((_ (col c) (col* c*) ...)
      (begin
        (set! col
-         (lambda (e)
-           (color-hex hex e)))
-       (set! c*
-         (lambda (e)
-           (color-hex h* e)))
+         (lambda (b)
+           (lambda (e)
+             (if b
+               (fg-color-hex-fmt c e)
+               (bg-color-hex-fmt c e)))))
+       (set! col*
+         (lambda (b)
+           (lambda (e)
+             (if b
+               (fg-color-hex-fmt c* e)
+               (bg-color-hex-fmt c* e)))))
        ...))))
+
 
 ;; Write out conky config to file
 (define-syntax conky
@@ -98,17 +112,37 @@
 
 ;; Dzen2 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define fg
+  (lambda (c)
+    (c #t)))
+
+(define bg
+  (lambda (c)
+    (c #f)))
+
 ;; Colorize an expression
-(define-syntax color
+(define-syntax fg-color-fmt
   (syntax-rules ()
     ((_ c e)
      (format "^fg(~a)~a^fg()" 'c e))))
 
 ;; Colorize an expression, with a hex value
-(define-syntax color-hex
+(define-syntax fg-color-hex-fmt
   (syntax-rules ()
     ((_ c e)
      (format "^fg(\\#~a)~a^fg()" c e))))
+
+;; Colorize an expression
+(define-syntax bg-color-fmt
+  (syntax-rules ()
+    ((_ c e)
+     (format "^bg(~a)~a^bg()" 'c e))))
+
+;; Colorize an expression, with a hex value
+(define-syntax bg-color-hex-fmt
+  (syntax-rules ()
+    ((_ c e)
+     (format "^bg(\\#~a)~a^bg()" c e))))
 
 ;; Make a clickable area that runs a command
 ;;   upon being clicked with button b (1, 2, or 3)
@@ -151,20 +185,38 @@
          ...
          (high (cHI batt)))))))
 
-(define wifi-gauge
-  (lambda (lm mh)
-    (let* ((iface 'wlan0)
-           (wlan (var wireless_link_qual_perc iface))
-           (wlan-perc (all wlan "%")))
-      (if_ (up 'wlan0)
-           (color-val wlan
-             (bad "unk" (yellow " DOWN"))
-             (pre (all " (" (var wireless_essid iface) ") "))
-             (post (all " : " (var addr iface)))
-             (low  (red wlan-perc))
-             (lm   (yellow wlan-perc))
-             (high (green wlan-perc)))
-           (red "WIFI OFF")))))
+(define-syntax wifi-gauge
+  (syntax-rules (unk off)
+    ((_ (unk unkc) (off offc) c0 (l* c*) ... cHI)
+     (let* ((iface 'wlan0)
+            (wlan (var wireless_link_qual_perc iface))
+            (wlan-perc (all wlan "%")))
+       (if_ (up 'wlan0)
+            (color-val wlan
+              (bad "unk" (unkc " DOWN"))
+              (pre (all " (" (var wireless_essid iface) ") "))
+              (post (all " : " (var addr iface)))
+              (low  (c0 wlan-perc))
+              (l*   (c* wlan-perc))
+              ...
+              (high (cHI wlan-perc)))
+            (offc "WIFI OFF"))))))
+
+; (define wifi-gauge
+;   (lambda (lm mh)
+;     (let* ((iface 'wlan0)
+;            (wlan (var wireless_link_qual_perc iface))
+;            (wlan-perc (all wlan "%")))
+;       (if_ (up 'wlan0)
+;            (color-val wlan
+;              (bad "unk" ((fg red) " DOWN"))
+;              (pre (all " (" (var wireless_essid iface) ") "))
+;              (post (all " : " (var addr iface)))
+;              (low  ((o (bg black) (fg red)) wlan-perc))
+;              (lm   ((fg red) wlan-perc))
+;              (mh   ((fg yellow) wlan-perc))
+;              (high ((fg green) wlan-perc)))
+;            ((fg red) "WIFI OFF")))))
 
 (define battery-status
   (lambda (c f d u)
@@ -204,6 +256,11 @@
                 ((null? args) "}")
                 (else (format " ~a~a" (car args)
                               (loop (cdr args)))))))))
+
+(define o
+  (lambda (f g)
+    (lambda (x)
+      (f (g x)))))
 
 ;; Output ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

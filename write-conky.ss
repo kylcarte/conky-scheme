@@ -21,9 +21,20 @@
 
 (define bat
   (battery-gauge
-    red
-    (25 red)
-    (75 yellow)
+    (o (bg black) (fg red))
+    (10 (o (bg black) (fg red)))
+    (25 (fg red))
+    (75 (fg yellow))
+    (fg green)))
+
+(define wifi
+  (wifi-gauge
+    (unk (fg red))
+    (off (fg red))
+    (fg red)
+    (35 (bg black))
+    (50 (fg red))
+    (80 (fg yellow))
     green))
 
 (conky "/home/kcarter/.conkytop"
@@ -35,7 +46,7 @@
       (network 'wlan0
         (all
           "WIFI"
-          (wifi-gauge 25 75))
+          wifi)
         (red "NO CONN")))
     " | "
     (battery-status
