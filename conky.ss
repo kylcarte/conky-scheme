@@ -1,26 +1,55 @@
 
 ;; User commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Test some conky on the fly!
-(define-syntax test-conky
+(define-syntax define-colors
   (syntax-rules ()
-    ((_ e)
-     (let ((file "this-is-not-the-name-of-this-file.conf"))
-       (with-output-to-file file
-         (lambda ()
-           (conf)
-           (display e))
-         'replace)
-       (system (format "conky -c ~a" file))
-       (delete-file file)))))
+    ((_ (col c) (col* c*) ...)
+     (begin
+       (set! col
+         (lambda (e)
+           (color c e)))
+       (set! col*
+         (lambda (e)
+           (color c* e)))
+       ...))))
+
+(define-syntax define-colors-hex
+  (syntax-rules ()
+    ((_ (col hex) (c* h*) ...)
+     (begin
+       (set! col
+         (lambda (e)
+           (color-hex hex e)))
+       (set! c*
+         (lambda (e)
+           (color-hex h* e)))
+       ...))))
 
 ;; Write out conky config to file
 (define-syntax conky
   (syntax-rules ()
+    ((_ f (c* ...) e)
+     (write-conky f '(c* ...)
+       (lambda ()
+         e)))
     ((_ f e)
-     (write-conky f
+     (write-conky f #f
        (lambda ()
          e)))))
+
+;; Test some conky on the fly!
+(define-syntax test-conky
+  (syntax-rules ()
+    ((_ (c* ...) e)
+     (let ((file "this-is-not-the-name-of-this-file.conf"))
+       (conky file (c* ...) e)
+       (system (format "conky -c ~a" file))
+       (delete-file file)))
+    ((_ e)
+     (let ((file "this-is-not-the-name-of-this-file.conf"))
+       (conky file e)
+       (system (format "conky -c ~a" file))
+       (delete-file file)))))
 
 ;; All if expressions: if_match, if_up, etc.
 (define-syntax if_
@@ -75,6 +104,12 @@
     ((_ c e)
      (format "^fg(~a)~a^fg()" 'c e))))
 
+;; Colorize an expression, with a hex value
+(define-syntax color-hex
+  (syntax-rules ()
+    ((_ c e)
+     (format "^fg(\\#~a)~a^fg()" c e))))
+
 ;; Make a clickable area that runs a command
 ;;   upon being clicked with button b (1, 2, or 3)
 (define clickable
@@ -83,52 +118,53 @@
 
 ;; Handy Compound Expressions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define color-val
-  (lambda (v badval badout pre low lm med mh high post)
-    (if_match (v == badval)
-      badout
-      (all
-        pre
-        (if_match (v == 100)
-          high
-          (if_match (v < lm)
-            low
-            (if_match (v < mh)
-              med
-              high)))
-        post))))
+(define-syntax color-val
+  (syntax-rules (bad low high pre post)
+    ((_ v (bad badval badout)
+          (pre pre-stuff)
+          (post post-stuff)
+          (low c0)
+          (l* c*)
+          ...
+          (high cHI))
+     (all
+       pre-stuff
+       (case_
+         ((match (str v) '== (str badval)) badout)
+         ((match (str v) '== (str 0)) c0)
+         ((match (str v) '< (str l*)) c*)
+         ...
+         (else cHI))
+       post-stuff))))
 
-(define battery-guage
-  (lambda (lm mh)
-    (let ((batt (var battery_percent)))
-      (color-val batt
-                 (nothing)
-                 (nothing)
-                 (nothing)
-                 (color red batt)
-                 lm
-                 (color yellow batt)
-                 mh
-                 (color green batt)
-                 (nothing)))))
 
-(define wifi-guage
+(define-syntax battery-gauge
+  (syntax-rules ()
+    ((_ c0 (l* c*) ... cHI)
+     (let ((batt (var battery_percent)))
+       (color-val batt
+         (bad (nothing) (nothing))
+         (pre (nothing))
+         (post (nothing))
+         (low (c0 batt))
+         (l* (c* batt))
+         ...
+         (high (cHI batt)))))))
+
+(define wifi-gauge
   (lambda (lm mh)
     (let* ((iface 'wlan0)
            (wlan (var wireless_link_qual_perc iface))
            (wlan-perc (all wlan "%")))
       (if_ (up 'wlan0)
            (color-val wlan
-                      "unk"
-                      (color yellow " DOWN")
-                      (all " (" (var wireless_essid iface) ") ")
-                      (color red wlan-perc)
-                      lm
-                      (color yellow wlan-perc)
-                      mh
-                      (color green wlan-perc)
-                      (all " : " (var addr iface)))
-           (color red "WIFI OFF")))))
+             (bad "unk" (yellow " DOWN"))
+             (pre (all " (" (var wireless_essid iface) ") "))
+             (post (all " : " (var addr iface)))
+             (low  (red wlan-perc))
+             (lm   (yellow wlan-perc))
+             (high (green wlan-perc)))
+           (red "WIFI OFF")))))
 
 (define battery-status
   (lambda (c f d u)
@@ -171,27 +207,71 @@
 
 ;; Output ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define conf
-  (lambda ()
+(define write-conf
+  (lambda (cs)
     (for-each
       (lambda (s)
-        (begin
-          (display s)
-          (newline)))
-      '("background no"
-        "out_to_console yes"
-        "out_to_x no"
-        "update_interval 1.0"
-        "total_run_times 0"
-        "use_spacer none"
-        "short_units on"
-        ""
-        "TEXT"))))
+        (display (car s))
+        (let loop ((s (cdr s)))
+          (cond
+            ((null? s) (newline))
+            (else (begin
+                    (printf " ~a" (car s))
+                    (loop (cdr s)))))))
+      (append cs '(("") ("TEXT"))))))
+
+(define default-conf
+  '((background no)
+    (out_to_console yes)
+    (out_to_x no)
+    (update_interval 1.0)
+    (total_run_times 0)
+    (use_spacer none)
+    (short_units on)))
+
+(define merge-conf
+  (lambda (new def)
+    (fold-right
+      (lambda (c cs)
+        (cons c
+              (cond
+                ((assq (car c) cs)
+                 => (lambda (p)
+                      (remove p cs)))
+                (else cs))))
+      def
+      new)))
 
 (define write-conky
-  (lambda (file th)
+  (lambda (file extra-conf th)
     (with-output-to-file file
       (lambda ()
-        (conf)
+        (write-conf
+          (merge-conf
+            (or extra-conf '())
+            default-conf))
         (display (th)))
       'replace)))
+
+;; Default colors ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-colors
+  (yellow        yellow      )
+  (orange        orange      )
+  (red           red         )
+  (magenta       magenta     )
+  (violet        violet      )
+  (blue          blue        )
+  (cyan          cyan        )
+  (green         green       )
+  (lightyellow   lightyellow )
+  (lightorange   lightorange )
+  (lightred      lightred    )
+  (lightmagenta  lightmagenta)
+  (lightviolet   lightviolet )
+  (lightblue     lightblue   )
+  (lightcyan     lightcyan   )
+  (lightgreen    lightgreen  )
+  (white         white       )
+  (black         black       ))
+
