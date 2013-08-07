@@ -3,6 +3,8 @@ conky-scheme
 
 A simple DSL in scheme for writing and maintaining conky config files!
 
+conky-scheme is implemented in (petite) Chez Scheme.
+
 Two examples of conky configs in write-conky.ss.
 
 Invoke 'make' to write config files.
