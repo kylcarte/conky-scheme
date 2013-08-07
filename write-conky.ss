@@ -21,21 +21,19 @@
 
 (define bat
   (battery-gauge
-    (o (bg black) (fg red))
-    (10 (o (bg black) (fg red)))
+    (10 (both (bg black) (fg red)))
     (25 (fg red))
     (75 (fg yellow))
     (fg green)))
 
 (define wifi
-  (wifi-gauge
+  (wifi-gauge 'wlan0
     (unk (fg red))
     (off (fg red))
-    (fg red)
     (35 (bg black))
     (50 (fg red))
     (80 (fg yellow))
-    green))
+    (fg green)))
 
 (conky "/home/kcarter/.conkytop"
   (all
@@ -47,14 +45,14 @@
         (all
           "WIFI"
           wifi)
-        (red "NO CONN")))
+        ((fg red) "NO CONN")))
     " | "
     (battery-status
       (all "AC " bat)
-      (green "BATT FULL")
+      ((fg green) "BATT FULL")
       (all "BATT " bat)
-      (green "BATT FULL"))))
+      ((fg green) "BATT FULL"))))
 
 (conky "/home/kcarter/.conkytime"
-  (orange (var time "%I:%M %p %A, %d %B %Y")))
+  ((fg orange) (var time "%I:%M %p %A, %d %B %Y")))
 

@@ -42,8 +42,8 @@
 ;; Write out conky config to file
 (define-syntax conky
   (syntax-rules ()
-    ((_ f (c* ...) e)
-     (write-conky f '(c* ...)
+    ((_ f (conf* ...) e)
+     (write-conky f '(conf* ...)
        (lambda ()
          e)))
     ((_ f e)
@@ -54,15 +54,15 @@
 ;; Test some conky on the fly!
 (define-syntax test-conky
   (syntax-rules ()
-    ((_ (c* ...) e)
-     (let ((file "this-is-not-the-name-of-this-file.conf"))
-       (conky file (c* ...) e)
-       (system (format "conky -c ~a" file))
+    ((_ (conf* ...) e)
+     (let ((file "/tmp/conky.conf"))
+       (conky file (conf* ...) e)
+       (system (format-catch-bad "conky -c ~a" file))
        (delete-file file)))
     ((_ e)
-     (let ((file "this-is-not-the-name-of-this-file.conf"))
+     (let ((file "/tmp/conky.conf"))
        (conky file e)
-       (system (format "conky -c ~a" file))
+       (system (format-catch-bad "conky -c ~a" file))
        (delete-file file)))))
 
 ;; All if expressions: if_match, if_up, etc.
@@ -98,12 +98,12 @@
 (define all
   (lambda as
     (apply string-append
-      (map (lambda (a) (format "~a" a)) as))))
+      (map (lambda (a) (format-catch-bad "~a" a)) as))))
 
 ;; Wrap expression in double quotes
 (define str
   (lambda (e)
-    (format "\"~a\"" e)))
+    (format-catch-bad "\"~a\"" e)))
 
 ;; YMMV
 (define batt-file "/sys/class/power_supply/BAT0/status")
@@ -124,99 +124,72 @@
 (define-syntax fg-color-fmt
   (syntax-rules ()
     ((_ c e)
-     (format "^fg(~a)~a^fg()" 'c e))))
+     (format-catch-bad "^fg(~a)~a^fg()" 'c e))))
 
 ;; Colorize an expression, with a hex value
 (define-syntax fg-color-hex-fmt
   (syntax-rules ()
     ((_ c e)
-     (format "^fg(\\#~a)~a^fg()" c e))))
+     (format-catch-bad "^fg(\\#~a)~a^fg()" c e))))
 
 ;; Colorize an expression
 (define-syntax bg-color-fmt
   (syntax-rules ()
     ((_ c e)
-     (format "^bg(~a)~a^bg()" 'c e))))
+     (format-catch-bad "^bg(~a)~a^bg()" 'c e))))
 
 ;; Colorize an expression, with a hex value
 (define-syntax bg-color-hex-fmt
   (syntax-rules ()
     ((_ c e)
-     (format "^bg(\\#~a)~a^bg()" c e))))
+     (format-catch-bad "^bg(\\#~a)~a^bg()" c e))))
 
 ;; Make a clickable area that runs a command
 ;;   upon being clicked with button b (1, 2, or 3)
 (define clickable
   (lambda (b c e)
-    (format "^ca(~a,~a)~a^ca()" b c e)))
+    (format-catch-bad "^ca(~a,~a)~a^ca()" b c e)))
 
 ;; Handy Compound Expressions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define-syntax color-val
-  (syntax-rules (bad low high pre post)
+  (syntax-rules (bad high)
     ((_ v (bad badval badout)
-          (pre pre-stuff)
-          (post post-stuff)
-          (low c0)
-          (l* c*)
-          ...
-          (high cHI))
-     (all
-       pre-stuff
-       (case_
-         ((match (str v) '== (str badval)) badout)
-         ((match (str v) '== (str 0)) c0)
-         ((match (str v) '< (str l*)) c*)
-         ...
-         (else cHI))
-       post-stuff))))
+        (l* c*)
+        ...
+        (high cHI))
+     (case_
+       ((match (str v) '== (str badval)) badout)
+       ((match (str v) '< (str l*)) c*)
+       ...
+       (else cHI)))))
 
 
 (define-syntax battery-gauge
   (syntax-rules ()
-    ((_ c0 (l* c*) ... cHI)
+    ((_ (l* c*) ... cHI)
      (let ((batt (var battery_percent)))
        (color-val batt
          (bad (nothing) (nothing))
-         (pre (nothing))
-         (post (nothing))
-         (low (c0 batt))
          (l* (c* batt))
          ...
          (high (cHI batt)))))))
 
 (define-syntax wifi-gauge
   (syntax-rules (unk off)
-    ((_ (unk unkc) (off offc) c0 (l* c*) ... cHI)
-     (let* ((iface 'wlan0)
-            (wlan (var wireless_link_qual_perc iface))
+    ((_ iface (unk unkc) (off offc) (l* c*) ... cHI)
+     (let* ((wlan (var wireless_link_qual_perc iface))
             (wlan-perc (all wlan "%")))
        (if_ (up 'wlan0)
-            (color-val wlan
-              (bad "unk" (unkc " DOWN"))
-              (pre (all " (" (var wireless_essid iface) ") "))
-              (post (all " : " (var addr iface)))
-              (low  (c0 wlan-perc))
-              (l*   (c* wlan-perc))
-              ...
-              (high (cHI wlan-perc)))
+            (all
+              (all " (" (var wireless_essid iface) ") ")
+              (color-val wlan
+                         (bad "unk" (unkc " DOWN"))
+                         (l*   (c* wlan-perc))
+                         ...
+                         (high (cHI wlan-perc)))
+              (all " : " (var addr iface)))
             (offc "WIFI OFF"))))))
-
-; (define wifi-gauge
-;   (lambda (lm mh)
-;     (let* ((iface 'wlan0)
-;            (wlan (var wireless_link_qual_perc iface))
-;            (wlan-perc (all wlan "%")))
-;       (if_ (up 'wlan0)
-;            (color-val wlan
-;              (bad "unk" ((fg red) " DOWN"))
-;              (pre (all " (" (var wireless_essid iface) ") "))
-;              (post (all " : " (var addr iface)))
-;              (low  ((o (bg black) (fg red)) wlan-perc))
-;              (lm   ((fg red) wlan-perc))
-;              (mh   ((fg yellow) wlan-perc))
-;              (high ((fg green) wlan-perc)))
-;            ((fg red) "WIFI OFF")))))
 
 (define battery-status
   (lambda (c f d u)
@@ -243,26 +216,53 @@
 ;; format an if expression
 (define if->string
   (lambda (t args c a)
-    (format "~a~a${else}~a${endif}"
-            (var->string (format "if_~a" t) args)
+    (format-catch-bad "~a~a${else}~a${endif}"
+            (var->string (format-catch-bad "if_~a" t) args)
             c a)))
 
 ;; format a var
 (define var->string
   (lambda (v args)
-    (format "${~a~a" v
+    (format-catch-bad "${~a~a" v
             (let loop ((args args))
               (cond
                 ((null? args) "}")
-                (else (format " ~a~a" (car args)
+                (else (format-catch-bad " ~a~a" (car args)
                               (loop (cdr args)))))))))
 
-(define o
+(define both
   (lambda (f g)
     (lambda (x)
       (f (g x)))))
 
 ;; Output ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; (define format-catch-bad
+;   (lambda (fstr . arg*)
+;     (apply format fstr arg*)))
+
+(define format-catch-bad
+  (lambda (fstr . arg*)
+    (let ((res (find-errors arg*)))
+      (let ((p (car res))
+            (args (cdr res)))
+        (if p
+          (error 'conky (format "Tried to print a procedure in: ~s"
+                                (apply format fstr args)))
+          (apply format fstr args))))))
+
+(define find-errors
+  (lambda (args)
+    (cond
+      ((null? args) '(#f . ()))
+      (else
+        (let ((arg (car args))
+              (rest (cdr args)))
+          (if (procedure? arg)
+            (let ((res (find-errors `(,(arg "???") . ,rest))))
+              `(#t . ,(cdr res)))
+            (let ((res (find-errors rest)))
+              `(,(car res) ,arg . ,(cdr res)))))))))
 
 (define write-conf
   (lambda (cs)
@@ -301,14 +301,15 @@
 
 (define write-conky
   (lambda (file extra-conf th)
-    (with-output-to-file file
-      (lambda ()
-        (write-conf
-          (merge-conf
-            (or extra-conf '())
-            default-conf))
-        (display (th)))
-      'replace)))
+    (let ((output (th)))
+      (with-output-to-file file
+         (lambda ()
+           (write-conf
+             (merge-conf
+               (or extra-conf '())
+               default-conf))
+           (display output))
+         'replace))))
 
 ;; Default colors ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
