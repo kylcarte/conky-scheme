@@ -39,3 +39,6 @@ Left as exercise to the reader.
 
 Enjoy.
 
+
+write-conky.ss is an example file. It's what I actually use.
+
